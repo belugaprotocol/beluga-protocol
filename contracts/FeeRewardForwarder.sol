@@ -3,7 +3,7 @@ pragma solidity 0.5.16;
 import "./Governable.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./hardworkInterface/IRewardPool.sol";
+import "./interfaces/IRewardPool.sol";
 import "./interfaces/uniswap/IUniswapV2Router02.sol";
 
 contract FeeRewardForwarder is Governable {

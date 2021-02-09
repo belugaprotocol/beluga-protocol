@@ -46,7 +46,7 @@ contract Controller is IController, Governable {
     // Rewards for hard work. Nullable.
     HardRewards public hardRewards;
 
-    uint256 public constant profitSharingNumerator = 5;
+    uint256 public profitSharingNumerator = 5;
     uint256 public constant profitSharingDenominator = 100;
 
     event SharePriceChangeLog(
@@ -73,12 +73,12 @@ contract Controller is IController, Governable {
         if (sharePrice > hint) {
             require(
                 sharePrice.mul(resolution).div(hint) <= deviationNumerator.mul(resolution).div(deviationDenominator),
-                "share price deviation"
+                "Controller: Share price deviation"
             );
         } else {
             require(
                 hint.mul(resolution).div(sharePrice) <= deviationNumerator.mul(resolution).div(deviationDenominator),
-                "share price deviation"
+                "Controller: Share price deviation"
             );
         }
         _;
@@ -124,6 +124,11 @@ contract Controller is IController, Governable {
     function setFeeRewardForwarder(address _feeRewardForwarder) public onlyGovernance {
       require(_feeRewardForwarder != address(0), "Controller: New reward forwarder should not be empty");
       feeRewardForwarder = _feeRewardForwarder;
+    }
+
+    function setProfitSharingNumerator(uint256 _profitSharingNumerator) public onlyGovernance {
+        require(_profitSharingNumerator < profitSharingDenominator, "Controller: profitSharingNumerator cannot go over the set denominator");
+        profitSharingNumerator = _profitSharingNumerator;
     }
 
     function addVaultAndStrategy(address _vault, address _strategy) external onlyGovernance {
