@@ -12,5 +12,7 @@
   "dependencies": {
     "@openzeppelin/contracts": "^2.5.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@openzeppelin/test-helpers": "^0.5.10"
+  }
 }
