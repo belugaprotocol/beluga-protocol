@@ -32,7 +32,7 @@ contract FeeRewardForwarder is Governable {
     routes[cake][busd] = [cake, wbnb, busd];
     routes[dot][busd] = [dot, wbnb, busd];
     routes[wbnb][busd] = [wbnb, busd];
-    routes[ust][busd] = [yfi, weth, dai];
+    routes[ust][busd] = [ust, wbnb, busd];
   }
 
   /*
