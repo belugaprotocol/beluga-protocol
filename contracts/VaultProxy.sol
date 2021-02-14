@@ -1,7 +1,7 @@
 pragma solidity 0.5.16;
 
 import "./interfaces/IUpgradeSource.sol";
-import "./proxy/BaseUpgradeabilityProxy.sol";
+import "@openzeppelin/upgrades/contracts/upgradeability/BaseUpgradeabilityProxy.sol";
 
 contract VaultProxy is BaseUpgradeabilityProxy {
 

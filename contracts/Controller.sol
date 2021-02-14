@@ -137,7 +137,7 @@ contract Controller is IController, Governable {
         require(_strategy != address(0), "Controller: New strategy shouldn't be empty");
 
         vaults[_vault] = true;
-        // no need to protect against sandwich, because there will be no call to withdrawAll
+        // No need to protect against sandwich, because there will be no call to withdrawAll
         // as the vault and strategy is brand new
         IVault(_vault).setStrategy(_strategy);
     }
@@ -196,7 +196,7 @@ contract Controller is IController, Governable {
         hardRewards = HardRewards(_hardRewards);
     }
 
-    // transfers token in the controller contract to the governance
+    // Transfers token in the controller contract to the governance
     function salvage(address _token, uint256 _amount) external onlyGovernance {
         IERC20(_token).safeTransfer(governance(), _amount);
     }
