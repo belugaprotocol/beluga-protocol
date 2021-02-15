@@ -43,7 +43,7 @@
 pragma solidity ^0.5.0;
 
 import "./Controllable.sol";
-import "./hardworkInterface/IController.sol";
+import "./interfaces/IController.sol";
 
 /**
  * @dev Standard math utilities missing in the Solidity language.
