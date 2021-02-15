@@ -19,6 +19,8 @@ contract Controller is IController, Governable {
 
     // Used for notifying profit sharing rewards.
     address public feeRewardForwarder;
+    // Currently unused, future variable for the treasury.
+    address public treasury;
 
     // [Grey list]
     // An EOA can safely interact with the system no matter what.
@@ -59,28 +61,6 @@ contract Controller is IController, Governable {
 
     modifier validVault(address _vault){
         require(vaults[_vault], "Controller: Vault does not exist");
-        _;
-    }
-
-    modifier confirmSharePrice(
-        address vault,
-        uint256 hint,
-        uint256 deviationNumerator,
-        uint256 deviationDenominator
-    ) {
-        uint256 sharePrice = IVault(vault).getPricePerFullShare();
-        uint256 resolution = 1e18;
-        if (sharePrice > hint) {
-            require(
-                sharePrice.mul(resolution).div(hint) <= deviationNumerator.mul(resolution).div(deviationDenominator),
-                "Controller: Share price deviation"
-            );
-        } else {
-            require(
-                hint.mul(resolution).div(sharePrice) <= deviationNumerator.mul(resolution).div(deviationDenominator),
-                "Controller: Share price deviation"
-            );
-        }
         _;
     }
 
@@ -146,18 +126,13 @@ contract Controller is IController, Governable {
         return IVault(_vault).getPricePerFullShare();
     }
 
-    function doHardWork(address _vault,
-        uint256 hint,
-        uint256 deviationNumerator,
-        uint256 deviationDenominator
-    ) external
-    confirmSharePrice(_vault, hint, deviationNumerator, deviationDenominator)
-    onlyHardWorkerOrGovernance
+    function doHardWork(address _vault) external 
+    onlyHardWorkerOrGovernance 
     validVault(_vault) {
         uint256 oldSharePrice = IVault(_vault).getPricePerFullShare();
         IVault(_vault).doHardWork();
         if (address(hardRewards) != address(0)) {
-            // rewards are an option now
+            // Rewards are an option now
             hardRewards.rewardMe(msg.sender, _vault);
         }
         emit SharePriceChangeLog(
@@ -169,24 +144,16 @@ contract Controller is IController, Governable {
         );
     }
 
-    function withdrawAll(address _vault,
-        uint256 hint,
-        uint256 deviationNumerator,
-        uint256 deviationDenominator
-    ) external
-    confirmSharePrice(_vault, hint, deviationNumerator, deviationDenominator)
-    onlyGovernance
+    function withdrawAll(address _vault) external 
+    onlyGovernance 
     validVault(_vault) {
         IVault(_vault).withdrawAll();
     }
 
-    function setStrategy(address _vault,
-        address strategy,
-        uint256 hint,
-        uint256 deviationNumerator,
-        uint256 deviationDenominator
+    function setStrategy(
+        address _vault,
+        address strategy
     ) external
-    confirmSharePrice(_vault, hint, deviationNumerator, deviationDenominator)
     onlyGovernance
     validVault(_vault) {
         IVault(_vault).setStrategy(strategy);
@@ -202,7 +169,7 @@ contract Controller is IController, Governable {
     }
 
     function salvageStrategy(address _strategy, address _token, uint256 _amount) external onlyGovernance {
-        // the strategy is responsible for maintaining the list of
+        // The strategy is responsible for maintaining the list of
         // salvagable tokens, to make sure that governance cannot come
         // in and take away the coins
         IStrategy(_strategy).salvage(governance(), _token, _amount);
