@@ -1,3 +1,5 @@
+// https://etherscan.io/address/0xDCB6A51eA3CA5d3Fd898Fd6564757c7aAeC3ca92#code
+
 /**
  *Submitted for verification at Etherscan.io on 2020-04-22
 */
@@ -574,6 +576,10 @@ pragma solidity ^0.5.0;
 contract IRewardDistributionRecipient is Ownable {
     address rewardDistribution;
 
+    constructor(address _rewardDistribution) public {
+        rewardDistribution = _rewardDistribution;
+    }
+
     function notifyRewardAmount(uint256 reward) external;
 
     modifier onlyRewardDistribution() {
@@ -596,7 +602,13 @@ pragma solidity ^0.5.0;
 
 
 
-
+/*
+*   Changes made to the SynthetixReward contract
+*
+*   uni to lpToken, and make it as a parameter of the constructor instead of hardcoded.
+*
+*
+*/
 
 contract LPTokenWrapper {
     using SafeMath for uint256;
@@ -628,14 +640,19 @@ contract LPTokenWrapper {
     }
 }
 
-// This contract uses Synthetix's CurveRewards contract under the hood.
-// There are a few improvements when it comes to flexibility such as
-// changing the duration of rewards, defining the LP token in the
-// constructor, defining the reward token and banning smart contracts.
+/*
+*   [Hardwork]
+*   This pool doesn't mint.
+*   the rewards should be first transferred to this pool, then get "notified"
+*   by calling `notifyRewardAmount`
+*/
 
-contract StakingRewards is LPTokenWrapper, IRewardDistributionRecipient, Controllable {
+contract ExclusiveRewardPool is LPTokenWrapper, IRewardDistributionRecipient, Controllable {
+
+    using Address for address;
+
     IERC20 public rewardToken;
-    uint256 public DURATION;
+    uint256 public duration; // Making it not a constant is less gas efficient, but portable
 
     uint256 public periodFinish = 0;
     uint256 public rewardRate = 0;
@@ -644,20 +661,13 @@ contract StakingRewards is LPTokenWrapper, IRewardDistributionRecipient, Control
     mapping(address => uint256) public userRewardPerTokenPaid;
     mapping(address => uint256) public rewards;
 
+    address public exclusiveAddress; // this would be the address of the AutoStake contract
+
     event RewardAdded(uint256 reward);
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
-    event RewardRejection(address indexed user, uint256 reward);
-
-    constructor(IERC20 _lpToken, IERC20 _rewardToken, uint256 _duration, address _storage, addess _rewardDistribution) public 
-    Controllable(_storage) 
-    IRewardDistributionRecipient(_rewardDistribution) 
-    {
-        lpToken = _lpToken;
-        rewardToken = _rewardToken;
-        DURATION = _duration;
-    }
+    event RewardDenied(address indexed user, uint256 reward);
 
     modifier updateReward(address account) {
         rewardPerTokenStored = rewardPerToken();
@@ -667,6 +677,20 @@ contract StakingRewards is LPTokenWrapper, IRewardDistributionRecipient, Control
             userRewardPerTokenPaid[account] = rewardPerTokenStored;
         }
         _;
+    }
+
+    // [Hardwork] setting the reward, lpToken, duration, and rewardDistribution for each pool
+    constructor(address _rewardToken,
+        address _lpToken,
+        uint256 _duration,
+        address _rewardDistribution,
+        address _storage) public
+    IRewardDistributionRecipient(_rewardDistribution)
+    Controllable(_storage) // only used for referencing the grey list
+    {
+        rewardToken = IERC20(_rewardToken);
+        lpToken = IERC20(_lpToken);
+        duration = _duration;
     }
 
     function lastTimeRewardApplicable() public view returns (uint256) {
@@ -695,8 +719,19 @@ contract StakingRewards is LPTokenWrapper, IRewardDistributionRecipient, Control
                 .add(rewards[account]);
     }
 
+    // only owner can initialize the exclusive address in the beginning.
+    // the steps to link this to Autostake are:
+    // (1) Deploy this reward pool
+    // (2) Deploy Autostake contract and linking this pool in its constructor
+    // (3) Invoke initExclusive in this reward pool to the Autostake contract
+    function initExclusive(address _exclusive) onlyOwner external {
+      require(exclusiveAddress == address(0), "exclusiveAddress has already been set");
+      exclusiveAddress = _exclusive;
+    }
+
     // stake visibility is public as overriding LPTokenWrapper's stake() function
     function stake(uint256 amount) public updateReward(msg.sender) {
+        require(msg.sender == exclusiveAddress, "Must be the exclusiveAddress to stake");
         require(amount > 0, "Cannot stake 0");
         super.stake(amount);
         emit Staked(msg.sender, amount);
@@ -713,20 +748,24 @@ contract StakingRewards is LPTokenWrapper, IRewardDistributionRecipient, Control
         getReward();
     }
 
+    /// A push mechanism for accounts that have not claimed their rewards for a long time.
+    /// The implementation is semantically analogous to getReward(), but uses a push pattern
+    /// instead of pull pattern.
+    function pushReward(address recipient) public updateReward(recipient) onlyGovernance {
+        uint256 reward = earned(recipient);
+        if (reward > 0) {
+            rewards[recipient] = 0;
+            rewardToken.safeTransfer(recipient, reward);
+            emit RewardPaid(recipient, reward);
+        }
+    }
+
     function getReward() public updateReward(msg.sender) {
         uint256 reward = earned(msg.sender);
         if (reward > 0) {
             rewards[msg.sender] = 0;
-            // We put in place measures that bans smart contracts
-            // from interacting with the farms, this line ensures
-            // an address is an EOA or a contract that has been greylisted
-            // to interact with our contracts.
-            if (tx.origin == msg.sender || !IController(controller()).greyList(msg.sender)) {
-                rewardToken.safeTransfer(msg.sender, reward);
-                emit RewardPaid(msg.sender, reward);
-            } else {
-                emit RewardRejection(msg.sender, reward);
-            }
+            rewardToken.safeTransfer(msg.sender, reward);
+            emit RewardPaid(msg.sender, reward);
         }
     }
 
@@ -735,29 +774,18 @@ contract StakingRewards is LPTokenWrapper, IRewardDistributionRecipient, Control
         onlyRewardDistribution
         updateReward(address(0))
     {
-        // Overflow fix as part of SIP-77 https://sips.synthetix.io/sips/sip-77
-
-        require(reward < uint(-1) / 1e18, "This notified amount invokes a multiplication overflow error");
-
+        // overflow fix according to https://sips.synthetix.io/sips/sip-77
+        require(reward < uint(-1) / 1e18, "the notified reward cannot invoke multiplication overflow");
+        
         if (block.timestamp >= periodFinish) {
-            rewardRate = reward.div(DURATION);
+            rewardRate = reward.div(duration);
         } else {
             uint256 remaining = periodFinish.sub(block.timestamp);
             uint256 leftover = remaining.mul(rewardRate);
-            rewardRate = reward.add(leftover).div(DURATION);
+            rewardRate = reward.add(leftover).div(duration);
         }
         lastUpdateTime = block.timestamp;
-        periodFinish = block.timestamp.add(DURATION);
+        periodFinish = block.timestamp.add(duration);
         emit RewardAdded(reward);
     }
-
-    // Recovers tokens the contract holds, this does not include LP tokens
-    // or BELUGA tokens.
-    // Part of SIP-68: https://sips.synthetix.io/sips/sip-68
-    function recoverTokens(IERC20 _token, address _destination, uint256 _amount) public onlyOwner {
-        require(_token != lpToken, "Cannot recover lpToken from contract");
-        require(_token != rewardToken, "Cannot recover rewardToken from contract");
-        _token.safeTransfer(_destination, _amount);
-    }
-
 }
