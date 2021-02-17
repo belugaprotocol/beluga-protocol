@@ -112,19 +112,9 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
   * doHardWork on the current strategy. Call this through controller to claim hard rewards.
   */
   function doHardWork() external whenStrategyDefined onlyControllerOrGovernance {
-    uint256 sharePriceBeforeHardWork = getPricePerFullShare();
-    if (_withdrawBeforeReinvesting()) {
-      IStrategy(strategy()).withdrawAllToVault();
-    }
-
     // Ensure that new funds are invested too
     invest();
     IStrategy(strategy()).doHardWork();
-    uint256 sharePriceAfterHardWork = getPricePerFullShare();
-
-    if (!allowSharePriceDecrease()) {
-      require(sharePriceBeforeHardWork <= sharePriceAfterHardWork, "Vault: Share price should not decrease");
-    }
   }
 
   /*
@@ -151,14 +141,16 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
         : underlyingUnit().mul(underlyingBalanceWithInvestment()).div(totalSupply());
   }
 
-  function getEstimatedWithdrawalAmount(uint256 numberOfShares) public view returns (uint256 realTimeCalculatedValue) {
-    return numberOfShares.mul(getPricePerFullShare()).div(underlyingUnit());
-  }
-
+  /*
+  * Get user's share (in underlying)
+  */
   function underlyingBalanceWithInvestmentForHolder(address holder) view external returns (uint256) {
-    // for compatibility
-    uint256 estimatedWithdrawal = getEstimatedWithdrawalAmount(balanceOf(holder));
-    return estimatedWithdrawal;
+    if (totalSupply() == 0) {
+      return 0;
+    }
+    return underlyingBalanceWithInvestment()
+        .mul(balanceOf(holder))
+        .div(totalSupply());
   }
 
   function futureStrategy() public view returns (address) {
@@ -226,20 +218,9 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
     _setVaultFractionToInvestDenominator(denominator);
   }
 
-  function setWithdrawBeforeReinvesting(bool value) external onlyGovernance {
-    _setWithdrawBeforeReinvesting(value);
-  }
-
-  function withdrawBeforeReinvesting() public view returns (bool) {
-    return _withdrawBeforeReinvesting();
-  }
-
-  function setAllowSharePriceDecrease(bool value) external onlyGovernance {
-    _setAllowSharePriceDecrease(value);
-  }
-
-  function allowSharePriceDecrease() public view returns (bool) {
-    return _allowSharePriceDecrease();
+  function rebalance() external onlyControllerOrGovernance {
+    withdrawAll();
+    invest();
   }
 
   function availableToInvestOut() public view returns (uint256) {
@@ -290,44 +271,29 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
   function withdraw(uint256 numberOfShares) external {
     require(totalSupply() > 0, "Vault: Vault has no shares");
     require(numberOfShares > 0, "Vault: numberOfShares must be greater than 0");
-    uint256 totalShareSupply = totalSupply();
+    uint256 totalSupply = totalSupply();
     _burn(msg.sender, numberOfShares);
 
-    uint256 calculatedSharePrice = getPricePerFullShare();
-
-    uint256 underlyingAmountToWithdraw = numberOfShares
-      .mul(calculatedSharePrice)
-      .div(underlyingUnit());
-
+    uint256 underlyingAmountToWithdraw = underlyingBalanceWithInvestment()
+        .mul(numberOfShares)
+        .div(totalSupply);
     if (underlyingAmountToWithdraw > underlyingBalanceInVault()) {
-      // withdraw everything from the strategy to accurately check the share value
-      if (numberOfShares == totalShareSupply) {
+      // Withdraw everything from the strategy to accurately check the share value
+      if (numberOfShares == totalSupply) {
         IStrategy(strategy()).withdrawAllToVault();
-        underlyingAmountToWithdraw = underlyingBalanceInVault();
       } else {
-        uint256 missingUnderlying = underlyingAmountToWithdraw.sub(underlyingBalanceInVault());
-        uint256 missingShares = numberOfShares.mul(missingUnderlying).div(underlyingAmountToWithdraw);
-        // When withdrawing to vault here, the vault does not have any assets. Therefore,
-        // all the assets that are in the strategy match the total supply of shares, increased
-        // by the share proportion that was already burned at the beginning of this withdraw transaction.
-        IStrategyV2(strategy()).withdrawToVault(missingShares, (totalSupply()).add(missingShares));
-        // recalculate to improve accuracy
-        calculatedSharePrice = getPricePerFullShare();
-
-        uint256 updatedUnderlyingAmountToWithdraw = numberOfShares
-          .mul(calculatedSharePrice)
-          .div(underlyingUnit());
-
-        underlyingAmountToWithdraw = Math.min(
-          updatedUnderlyingAmountToWithdraw,
-          underlyingBalanceInVault()
-        );
+        uint256 missing = underlyingAmountToWithdraw.sub(underlyingBalanceInVault());
+        IStrategy(strategy()).withdrawToVault(missing);
       }
+      // Recalculate to improve accuracy
+      underlyingAmountToWithdraw = Math.min(underlyingBalanceWithInvestment()
+          .mul(numberOfShares)
+          .div(totalSupply), underlyingBalanceInVault());
     }
 
     IERC20(underlying()).safeTransfer(msg.sender, underlyingAmountToWithdraw);
 
-    // Update the withdrawal amount for the holder
+    // update the withdrawal amount for the holder
     emit Withdraw(msg.sender, underlyingAmountToWithdraw);
   }
 
@@ -339,7 +305,9 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
       require(IStrategy(strategy()).depositArbCheck(), "Vault: Too much arb");
     }
 
-    uint256 toMint = amount.mul(underlyingUnit()).div(getPricePerFullShare());
+    uint256 toMint = totalSupply() == 0
+      ? amount
+      : amount.mul(totalSupply().div(underlyingBalanceWithInvestment()));
 
     _mint(beneficiary, toMint);
 
@@ -369,9 +337,5 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
   function finalizeUpgrade() external onlyGovernance {
     _setNextImplementation(address(0));
     _setNextImplementationTimestamp(0);
-    _setAllowSharePriceDecrease(false);
-    _setWithdrawBeforeReinvesting(false);
-    require(!withdrawBeforeReinvesting(), "Vault: withdrawBeforeReinvesting is incorrect");
-    require(!allowSharePriceDecrease(), "Vault: allowSharePriceDecrease is incorrect");
   }
 }
