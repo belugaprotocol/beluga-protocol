@@ -98,7 +98,6 @@ contract MasterchefStakingImplementation is IStrategy, BaseUpgradeableStrategy {
             (uint256 balanceInContract, ) = IMasterchef(rewardPool()).userInfo(0, address(this));
             IMasterchef(rewardPool()).leaveStaking(balanceInContract);
         }
-        _collectFees();
         IERC20(underlying()).safeTransfer(vault(), IERC20(underlying()).balanceOf(address(this)));
     }
 
