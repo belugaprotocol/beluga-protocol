@@ -50,12 +50,14 @@ contract VaiVaultStrategy is IStrategy, Controllable, ProfitNotifier {
     constructor(
         address _storage,
         address _underlying,
+        address _rewardToken,
         address _stakingContract,
         address _vault
     )
     ProfitNotifier(_storage, _underlying)
     public {
         underlying = ERC20Detailed(_underlying);
+        rewardToken = _rewardToken;
         vaiVault = IVaiVault(_stakingContract);
         vault = _vault;
         unsalvagableTokens[_underlying] = true;
