@@ -83,8 +83,9 @@ contract MasterchefStakingImplementation is IStrategy, BaseUpgradeableStrategy {
     /*
     * Collects fees for BELUGA stakers.
     */
-    function _collectFees() internal {
-        notifyProfitInRewardToken(IERC20(underlying()).balanceOf(address(this)));
+    function _collectFees(uint256 _former) internal {
+        uint256 current = IERC20(underlying()).balanceOf(address(this));
+        notifyProfitInRewardToken(current.sub(_former));
     }
 
     /*
@@ -145,8 +146,9 @@ contract MasterchefStakingImplementation is IStrategy, BaseUpgradeableStrategy {
     * function call will fail if deposits are paused.
     */
     function doHardWork() external onlyNotPausedInvesting restricted {
+        uint256 former = IERC20(underlying()).balanceOf(address(this));
         IMasterchef(rewardPool()).enterStaking(0);
-        _collectFees();
+        _collectFees(former);
         investAllUnderlying();
     }
 
@@ -154,7 +156,7 @@ contract MasterchefStakingImplementation is IStrategy, BaseUpgradeableStrategy {
         return setAddress(_UNDERLYING_OUTPUT_SLOT, _output);
     }
 
-    function underlyingOutput() public view returns (string) {
+    function underlyingOutput() public view returns (address) {
         return getAddress(_UNDERLYING_OUTPUT_SLOT);
     }
 
