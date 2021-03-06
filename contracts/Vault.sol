@@ -24,27 +24,12 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
   event Invest(uint256 amount);
   event StrategyAnnounced(address newStrategy, uint256 time);
   event StrategyChanged(address newStrategy, address oldStrategy);
-
-  modifier whenStrategyDefined() {
-    require(address(strategy()) != address(0), "Vault: Strategy must be defined");
-    _;
-  }
-
-  // Only smart contracts will be affected by this modifier
-  modifier defense() {
-    require(
-      (msg.sender == tx.origin) ||                // If it is a normal user and not smart contract,
-      // then the requirement will pass
-      !IController(controller()).greyList(msg.sender), // If it is a smart contract, then
-      "Vault: This smart contract has not been grey listed"  // make sure that it is not on our greyList.
-    );
-    _;
-  }
+  event UpgradeAnnounced(address newImplementation);
 
   constructor() public {
   }
 
-  // The function is named differently to not cause an inheritance clash in truffle and allows for tests
+  // The function is named differently to not cause an inheritance clash in truffle and to allow for tests
   function initializeVault(address _storage,
     address _underlying,
     uint256 _toInvestNumerator,
@@ -107,12 +92,28 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
     return _nextImplementationDelay();
   }
 
+  modifier whenStrategyDefined() {
+    require(address(strategy()) != address(0), "Vault: Strategy must be defined");
+    _;
+  }
+
+  // Only smart contracts will be affected by this modifier
+  modifier defense() {
+    require(
+      (msg.sender == tx.origin) ||                // If it is a normal user and not smart contract,
+                                                  // then the requirement will pass
+      !IController(controller()).greyList(msg.sender), // If it is a smart contract, then
+      "Vault: This smart contract has been greylisted"  // make sure that it is not on our greyList.
+    );
+    _;
+  }
+
   /**
   * Chooses the best strategy and re-invests. If the strategy did not change, it just calls
   * doHardWork on the current strategy. Call this through controller to claim hard rewards.
   */
-  function doHardWork() external whenStrategyDefined onlyControllerOrGovernance {
-    // Ensure that new funds are invested too
+  function doHardWork() whenStrategyDefined onlyControllerOrGovernance external {
+    // ensure that new funds are invested too
     invest();
     IStrategy(strategy()).doHardWork();
   }
@@ -129,7 +130,7 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
   */
   function underlyingBalanceWithInvestment() view public returns (uint256) {
     if (address(strategy()) == address(0)) {
-      // initial state, when not set
+      // Initial state, when not set
       return underlyingBalanceInVault();
     }
     return underlyingBalanceInVault().add(IStrategy(strategy()).investedUnderlyingBalance());
@@ -141,8 +142,7 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
         : underlyingUnit().mul(underlyingBalanceWithInvestment()).div(totalSupply());
   }
 
-  /*
-  * Get user's share (in underlying)
+  /* Get the user's share (in underlying)
   */
   function underlyingBalanceWithInvestmentForHolder(address holder) view external returns (uint256) {
     if (totalSupply() == 0) {
@@ -166,7 +166,7 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
   }
 
   function canUpdateStrategy(address _strategy) public view returns(bool) {
-    return strategy() == address(0) // no strategy was set yet
+    return strategy() == address(0) // No strategy was set yet
       || (_strategy == futureStrategy()
           && block.timestamp > strategyUpdateTime()
           && strategyUpdateTime() > 0); // or the timelock has passed
@@ -194,13 +194,13 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
   function setStrategy(address _strategy) public onlyControllerOrGovernance {
     require(canUpdateStrategy(_strategy),
       "Vault: The strategy exists and switch timelock did not elapse yet");
-    require(_strategy != address(0), "new _strategy cannot be empty");
-    require(IStrategy(_strategy).underlying() == address(underlying()), "Vault: Vault Underlying must match Strategy underlying");
+    require(_strategy != address(0), "Vault: New _strategy cannot be empty");
+    require(IStrategy(_strategy).underlying() == address(underlying()), "Vault: Vault underlying must match Strategy underlying");
     require(IStrategy(_strategy).vault() == address(this), "Vault: The strategy does not belong to this vault");
 
     emit StrategyChanged(_strategy, strategy());
     if (address(_strategy) != address(strategy())) {
-      if (address(strategy()) != address(0)) { // if the original strategy (no underscore) is defined
+      if (address(strategy()) != address(0)) { // If the original strategy (no underscore) is defined
         IERC20(underlying()).safeApprove(address(strategy()), 0);
         IStrategy(strategy()).withdrawAllToVault();
       }
@@ -212,8 +212,8 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
   }
 
   function setVaultFractionToInvest(uint256 numerator, uint256 denominator) external onlyGovernance {
-    require(denominator > 0, "Vault: denominator must be greater than 0");
-    require(numerator <= denominator, "Vault: denominator must be greater than or equal to the numerator");
+    require(denominator > 0, "Vault: Denominator must be greater than 0");
+    require(numerator <= denominator, "Vault: Denominator must be greater than or equal to the numerator");
     _setVaultFractionToInvestNumerator(numerator);
     _setVaultFractionToInvestDenominator(denominator);
   }
@@ -278,14 +278,14 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
         .mul(numberOfShares)
         .div(totalSupply);
     if (underlyingAmountToWithdraw > underlyingBalanceInVault()) {
-      // Withdraw everything from the strategy to accurately check the share value
+      // withdraw everything from the strategy to accurately check the share value
       if (numberOfShares == totalSupply) {
         IStrategy(strategy()).withdrawAllToVault();
       } else {
         uint256 missing = underlyingAmountToWithdraw.sub(underlyingBalanceInVault());
         IStrategy(strategy()).withdrawToVault(missing);
       }
-      // Recalculate to improve accuracy
+      // recalculate to improve accuracy
       underlyingAmountToWithdraw = Math.min(underlyingBalanceWithInvestment()
           .mul(numberOfShares)
           .div(totalSupply), underlyingBalanceInVault());
@@ -306,9 +306,8 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
     }
 
     uint256 toMint = totalSupply() == 0
-      ? amount
-      : amount.mul(totalSupply().div(underlyingBalanceWithInvestment()));
-
+        ? amount
+        : amount.mul(totalSupply()).div(underlyingBalanceWithInvestment());
     _mint(beneficiary, toMint);
 
     IERC20(underlying()).safeTransferFrom(sender, address(this), amount);
@@ -323,6 +322,7 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
   function scheduleUpgrade(address impl) public onlyGovernance {
     _setNextImplementation(impl);
     _setNextImplementationTimestamp(block.timestamp.add(nextImplementationDelay()));
+    emit UpgradeAnnounced(impl);
   }
 
   function shouldUpgrade() external view returns (bool, address) {

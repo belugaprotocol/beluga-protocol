@@ -94,10 +94,8 @@ contract MasterchefStakingImplementation is IStrategy, BaseUpgradeableStrategy {
     * vault's users.
     */
     function withdrawAllToVault() public restricted {
-        uint256 former = IERC20(underlying()).balanceOf(address(this));
         if(rewardPool() != address(0)) {
-            (uint256 balanceInContract, ) = IMasterchef(rewardPool()).userInfo(0, address(this));
-            IMasterchef(rewardPool()).leaveStaking(balanceInContract);
+            IMasterchef(rewardPool()).leaveStaking(rewardPoolStake());
         }
         IERC20(underlying()).safeTransfer(vault(), IERC20(underlying()).balanceOf(address(this)));
     }
@@ -112,11 +110,14 @@ contract MasterchefStakingImplementation is IStrategy, BaseUpgradeableStrategy {
             // While we have the check above, we still using SafeMath below
             // for the peace of mind (in case something gets changed in between)
             uint256 needToWithdraw = amount.sub(IERC20(underlying()).balanceOf(address(this)));
-            (uint256 balanceInContract, ) = IMasterchef(rewardPool()).userInfo(0, address(this));
-            IMasterchef(rewardPool()).leaveStaking(Math.min(balanceInContract, needToWithdraw));
+            IMasterchef(rewardPool()).leaveStaking(Math.min(rewardPoolStake(), needToWithdraw));
         }
 
         IERC20(underlying()).safeTransfer(vault(), amount);
+    }
+
+    function rewardPoolStake() internal view returns (uint256 stake) {
+        (stake, ) = IMasterchef(rewardPool()).userInfo(0, address(this));
     }
 
     /*
@@ -127,8 +128,7 @@ contract MasterchefStakingImplementation is IStrategy, BaseUpgradeableStrategy {
             return IERC20(underlying()).balanceOf(address(this));
         }
 
-        (uint256 _amount, ) = IMasterchef(rewardPool()).userInfo(0, address(this));
-        return _amount.add(IERC20(underlying()).balanceOf(address(this)));
+        return rewardPoolStake().add(IERC20(underlying()).balanceOf(address(this)));
     }
 
     /*
