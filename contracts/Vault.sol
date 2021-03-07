@@ -176,7 +176,7 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
   * Indicates that the strategy update will happen in the future
   */
   function announceStrategyUpdate(address _strategy) public onlyControllerOrGovernance {
-    // records a new timestamp
+    // Records a new timestamp
     uint256 when = block.timestamp.add(strategyTimeLock());
     _setStrategyUpdateTime(when);
     _setFutureStrategy(_strategy);
@@ -278,14 +278,14 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
         .mul(numberOfShares)
         .div(totalSupply);
     if (underlyingAmountToWithdraw > underlyingBalanceInVault()) {
-      // withdraw everything from the strategy to accurately check the share value
+      // Withdraw everything from the strategy to accurately check the share value
       if (numberOfShares == totalSupply) {
         IStrategy(strategy()).withdrawAllToVault();
       } else {
         uint256 missing = underlyingAmountToWithdraw.sub(underlyingBalanceInVault());
         IStrategy(strategy()).withdrawToVault(missing);
       }
-      // recalculate to improve accuracy
+      // Recalculate to improve accuracy
       underlyingAmountToWithdraw = Math.min(underlyingBalanceWithInvestment()
           .mul(numberOfShares)
           .div(totalSupply), underlyingBalanceInVault());
@@ -293,7 +293,7 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
 
     IERC20(underlying()).safeTransfer(msg.sender, underlyingAmountToWithdraw);
 
-    // update the withdrawal amount for the holder
+    // Update the withdrawal amount for the holder
     emit Withdraw(msg.sender, underlyingAmountToWithdraw);
   }
 

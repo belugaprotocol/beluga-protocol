@@ -15,8 +15,8 @@ contract HardRewards is Controllable {
   // Token used for rewards
   IERC20 public token;
 
-  // How many tokens per each block
-  uint256 public blockReward;
+  // How many rewards for each harvest
+  uint256 public rewardRate;
 
   // Vault to the last rewarded block
   mapping(address => uint256) public lastReward;
@@ -31,7 +31,7 @@ contract HardRewards is Controllable {
   * reverting the transaction in this function.
   */
   function rewardMe(address recipient, address vault) external onlyController {
-    if (address(token) == address(0) || blockReward == 0) {
+    if (address(token) == address(0) || rewardRate == 0) {
       // no rewards now
       emit Rewarded(recipient, vault, 0);
       return;
@@ -43,12 +43,9 @@ contract HardRewards is Controllable {
       return;
     }
 
-    uint256 span = block.number.sub(lastReward[vault]);
-    uint256 reward = blockReward.mul(span);
-
-    if (reward > 0) {
+    if (rewardRate > 0) {
       uint256 balance = token.balanceOf(address(this));
-      uint256 realReward = balance >= reward ? reward : balance;
+      uint256 realReward = balance >= rewardRate ? rewardRate : balance;
       if (realReward > 0) {
         token.safeTransfer(recipient, realReward);
       }
@@ -73,7 +70,7 @@ contract HardRewards is Controllable {
   */
   function load(address _token, uint256 _rate, uint256 _amount) external onlyGovernance {
     token = IERC20(_token);
-    blockReward = _rate;
+    rewardRate = _rate;
     if (address(token) != address(0) && _amount > 0) {
       token.safeTransferFrom(msg.sender, address(this), _amount);
     }

@@ -5,7 +5,7 @@ pragma solidity 0.5.16;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/ownership/Ownable.sol";
-import "./interfaces/IVault.sol";
+import "../../interfaces/IVault.sol";
 
 /// @title Thugs Token Smelter
 /// @author Chainvisions
@@ -23,7 +23,7 @@ contract HyperSmelter is Ownable {
     // Underlying tokens that can be burned
     address[4] public underlyingTokens;
     // Mapping for function signatures
-    mapping(uint256 => string) functionSignatures;
+    mapping(uint256 => string) public functionSignatures;
 
     constructor(address[4] memory _underlyingTokens, address _targetVault, address _alloy, address _hyperCity) public {
         targetVault = _targetVault;

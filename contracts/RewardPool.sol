@@ -576,6 +576,10 @@ contract IRewardDistributionRecipient is Ownable {
 
     function notifyRewardAmount(uint256 reward) external;
 
+    constructor(address _rewardDistribution) public {
+        rewardDistribution = _rewardDistribution;
+    }
+
     modifier onlyRewardDistribution() {
         require(_msgSender() == rewardDistribution, "Caller is not reward distribution");
         _;
@@ -650,7 +654,7 @@ contract StakingRewards is LPTokenWrapper, IRewardDistributionRecipient, Control
     event RewardPaid(address indexed user, uint256 reward);
     event RewardRejection(address indexed user, uint256 reward);
 
-    constructor(IERC20 _lpToken, IERC20 _rewardToken, uint256 _duration, address _storage, addess _rewardDistribution) public 
+    constructor(IERC20 _lpToken, IERC20 _rewardToken, uint256 _duration, address _storage, address _rewardDistribution) public 
     Controllable(_storage) 
     IRewardDistributionRecipient(_rewardDistribution) 
     {
@@ -754,7 +758,7 @@ contract StakingRewards is LPTokenWrapper, IRewardDistributionRecipient, Control
     // Recovers tokens the contract holds, this does not include LP tokens
     // or BELUGA tokens.
     // Part of SIP-68: https://sips.synthetix.io/sips/sip-68
-    function recoverTokens(IERC20 _token, address _destination, uint256 _amount) public onlyOwner {
+    function recoverTokens(IERC20 _token, address _destination, uint256 _amount) public onlyGovernance {
         require(_token != lpToken, "Cannot recover lpToken from contract");
         require(_token != rewardToken, "Cannot recover rewardToken from contract");
         _token.safeTransfer(_destination, _amount);

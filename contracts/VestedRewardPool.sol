@@ -42,6 +42,7 @@ pragma solidity ^0.5.0;
 
 import "./Controllable.sol";
 import "./interfaces/IController.sol";
+import "./interfaces/IRewardEscrow.sol";
 
 /**
  * @dev Standard math utilities missing in the Solidity language.
@@ -632,13 +633,15 @@ contract LPTokenWrapper {
     }
 }
 
-/// @title Vested Reward Pool
-/// @notice Standard Synthetix reward pool
-/// with vesting implemented.
+// This contract uses Synthetix's CurveRewards contract under the hood.
+// There are a few improvements when it comes to flexibility such as
+// changing the duration of rewards, defining the LP token in the
+// constructor, defining the reward token and banning smart contracts.
 
-contract VestedRewardPool is LPTokenWrapper, IRewardDistributionRecipient, Controllable {
+contract StakingRewards is LPTokenWrapper, IRewardDistributionRecipient, Controllable {
     IERC20 public rewardToken;
     uint256 public DURATION;
+    IRewardEscrow public escrow;
 
     uint256 public periodFinish = 0;
     uint256 public rewardRate = 0;
@@ -652,21 +655,14 @@ contract VestedRewardPool is LPTokenWrapper, IRewardDistributionRecipient, Contr
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
     event RewardRejection(address indexed user, uint256 reward);
-    event RewardsLocked(uint256 amount, uint256 duration, uint256 total);
-    event RewardsUnlocked(uint256 amount, uint256 total);
 
-    struct UnlockSchedule {
-        uint256 duration;
-    }
-
-    UnlockSchedule[] public unlockSchedule;
-
-    constructor(IERC20 _lpToken, IERC20 _rewardToken, uint256 _duration, address _storage, address _rewardDistribution) public 
+    constructor(IERC20 _lpToken, IERC20 _rewardToken, IRewardEscrow _escrow, uint256 _duration, address _storage, address _rewardDistribution) public 
     Controllable(_storage) 
     IRewardDistributionRecipient(_rewardDistribution) 
     {
         lpToken = _lpToken;
         rewardToken = _rewardToken;
+        escrow = _escrow;
         DURATION = _duration;
     }
 
@@ -733,7 +729,11 @@ contract VestedRewardPool is LPTokenWrapper, IRewardDistributionRecipient, Contr
             // an address is an EOA or a contract that has been greylisted
             // to interact with our contracts.
             if (tx.origin == msg.sender || !IController(controller()).greyList(msg.sender)) {
-                rewardToken.safeTransfer(msg.sender, reward);
+                uint256 instantReward = reward.div(3); // Payout 1/3 of rewards
+                uint256 vestedReward = reward.sub(instantReward); // Vest 2/3 of rewards for 6 months.
+                rewardToken.safeTransfer(msg.sender, instantReward);
+                rewardToken.safeTransfer(address(escrow), vestedReward);
+                escrow.appendVestingEntry(msg.sender, vestedReward);
                 emit RewardPaid(msg.sender, reward);
             } else {
                 emit RewardRejection(msg.sender, reward);
