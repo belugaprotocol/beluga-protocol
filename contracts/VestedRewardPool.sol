@@ -770,5 +770,13 @@ contract StakingRewards is LPTokenWrapper, IRewardDistributionRecipient, Control
         require(_token != rewardToken, "Cannot recover rewardToken from contract");
         _token.safeTransfer(_destination, _amount);
     }
+    
+    function setRewardsDuration(uint256 _rewardsDuration) external onlyGovernance {
+        require(
+            block.timestamp > periodFinish,
+            "Previous rewards period must be complete before changing the duration for the new period"
+        );
+        DURATION = _rewardsDuration;
+    }
 
 }
