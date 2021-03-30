@@ -572,16 +572,14 @@ pragma solidity ^0.5.0;
 
 
 contract IRewardDistributionRecipient is Ownable {
-    address rewardDistribution;
+    mapping(address => bool) distribution;
 
     function notifyRewardAmount(uint256 reward) external;
 
-    constructor(address _rewardDistribution) public {
-        rewardDistribution = _rewardDistribution;
-    }
+    constructor() public {}
 
     modifier onlyRewardDistribution() {
-        require(_msgSender() == rewardDistribution, "Caller is not reward distribution");
+        require(distribution[msg.sender], "Caller is not reward distribution");
         _;
     }
 
@@ -589,7 +587,14 @@ contract IRewardDistributionRecipient is Ownable {
         external
         onlyOwner
     {
-        rewardDistribution = _rewardDistribution;
+        distribution[_rewardDistribution] = true;
+    }
+
+    function removeRewardDistribution(address _rewardDistribution)
+        external
+        onlyOwner
+    {
+        distribution[_rewardDistribution] = false;
     }
 }
 
@@ -654,9 +659,8 @@ contract StakingRewards is LPTokenWrapper, IRewardDistributionRecipient, Control
     event RewardPaid(address indexed user, uint256 reward);
     event RewardRejection(address indexed user, uint256 reward);
 
-    constructor(IERC20 _lpToken, IERC20 _rewardToken, uint256 _duration, address _storage, address _rewardDistribution) public 
+    constructor(IERC20 _lpToken, IERC20 _rewardToken, uint256 _duration, address _storage) public 
     Controllable(_storage) 
-    IRewardDistributionRecipient(_rewardDistribution) 
     {
         lpToken = _lpToken;
         rewardToken = _rewardToken;
