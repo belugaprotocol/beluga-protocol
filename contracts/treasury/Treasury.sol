@@ -15,6 +15,7 @@ import "../interfaces/uniswap/IUniswapV2Router02.sol";
 /// @notice An implementation of a high yield treasury to be used for Beluga Protocol
 
 contract Treasury is Controllable {
+    using Address for address;
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -28,6 +29,11 @@ contract Treasury is Controllable {
     event ModuleDivest(address indexed module, uint256 indexed amount);
     event StrategyExecution(address indexed module, uint256 indexed timestamp);
     event TradeExecution(address indexed input, address indexed output, uint256 indexed timestamp);
+
+    modifier validModule(address _module) {
+        require(modules[_module], "Treasury: Module must be installed");
+        _;
+    }
 
     constructor(address _storage) Controllable(_storage) public {}
 
@@ -51,11 +57,8 @@ contract Treasury is Controllable {
 
     /// @notice Allocates funding to a specified module and puts the
     /// allocated funds to work.
-    function allocateFunding(address _token, uint256 _funds, address _module) public onlyGovernance {
-        // We perform two checks to ensure
-        // A. The module is installed in our system.
-        // B. The module is not an EOA.
-        require(modules[_module], "Treasury: Module must be installed");
+    function allocateFunding(address _token, uint256 _funds, address _module) public onlyGovernance validModule(_module) {
+        // We perform a check to ensure the module is not an EOA.
         require(IModule(_module).moduleExistenceCheck(), "Treasury: Cannot allocate funding to an EOA");
         IERC20(_token).safeTransfer(_module, _funds);
         IModule(_module).invest();
@@ -70,13 +73,12 @@ contract Treasury is Controllable {
 
     /// @notice Executes the specified module's strategy to generate profit
     /// off of the allocated funds.
-    function executeStrategy(address _module) public onlyGovernance {
-        require(modules[_module], "Treasury: Module must be installed");
+    function executeStrategy(address _module) public onlyGovernance validModule(_module) {
         IModule(_module).runStrategy();
         emit StrategyExecution(_module, block.timestamp);
     }
 
-    /// @notice Executes Fan AMM trade.
+    /// @notice Executes an AMM trade.
     function executeTrade(address _router, uint256 _amount, address[] memory _route) public onlyGovernance {
         address tokenIn = _route[0];
         IERC20(_route[0]).approve(_router, 0);
