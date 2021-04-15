@@ -7,12 +7,12 @@ import "./Controllable.sol";
 /// @notice This pool stakes into another pool. This pool can be thought
 /// of like a vault.
 
-contract StakingRewards is Controllable {
+contract Autostake is Controllable {
 
   using SafeERC20 for IERC20;
   using SafeMath for uint256;
 
-  NoMintRewardPool public rewardPool;
+  StakingRewards public rewardPool;
   IERC20 public lpToken;
   uint256 public unit = 1e18;
   uint256 public valuePerShare = unit;
@@ -34,7 +34,7 @@ contract StakingRewards is Controllable {
   constructor(address _storage, address pool, address token, address _greylistEscrow) public
   Controllable(_storage)
   {
-    rewardPool = NoMintRewardPool(pool);
+    rewardPool = StakingRewards(pool);
     lpToken = IERC20(token);
     greylistEscrow = _greylistEscrow;
   }
