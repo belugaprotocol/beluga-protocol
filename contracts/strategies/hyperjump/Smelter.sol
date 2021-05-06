@@ -44,8 +44,7 @@ contract HyperSmelter is Ownable {
         uint256 alloyToInvest = IERC20(alloy).balanceOf(address(this));
         IERC20(alloy).safeApprove(targetVault, 0);
         IERC20(alloy).safeApprove(targetVault, alloyToInvest);
-        IVault(targetVault).deposit(alloyToInvest);
-        IERC20(targetVault).safeTransfer(msg.sender, IERC20(targetVault).balanceOf(address(this)));
+        IVault(targetVault).depositFor(alloyToInvest, msg.sender);
     }
 
     /// @notice Maps a function signature with an index, this is used for smelting.
