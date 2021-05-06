@@ -1,12 +1,38 @@
 pragma solidity 0.5.16;
 
-import "./Governable.sol";
+interface IStrategy {
+    
+    function unsalvagableTokens(address tokens) external view returns (bool);
+    
+    function governance() external view returns (address);
+    function controller() external view returns (address);
+    function underlying() external view returns (address);
+    function vault() external view returns (address);
+    function vaultRewardPool() external view returns (address);
+
+    function withdrawAllToVault() external;
+    function withdrawToVault(uint256 amount) external;
+
+    function investedUnderlyingBalance() external view returns (uint256); // itsNotMuch()
+
+    // should only be called by controller
+    function salvage(address recipient, address token, uint256 amount) external;
+
+    function doHardWork() external;
+    function depositArbCheck() external view returns(bool);
+}
+
+pragma solidity 0.5.16;
+
+import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/IRewardPool.sol";
 import "./interfaces/uniswap/IUniswapV2Router02.sol";
+import "./Governable.sol";
 
 contract FeeRewardForwarder is Governable {
+  using SafeMath for uint256;
   using SafeERC20 for IERC20;
 
   address constant public cake = address(0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82);
@@ -95,4 +121,45 @@ contract FeeRewardForwarder is Governable {
       // do not take any fees - leave them in the controller
     }
   }
+
+  // Modified version of poolNotifyFixedTarget to support
+  // vault reward pool injections. Please note that the strategy
+  // calling this function must have a `vaultRewardPool` variable.
+  function notifyStrategyFees(address _token, uint256 _amount) external {
+    if (targetToken == address(0)) {
+      return; // a No-op if target pool is not set yet
+    }
+    if (_token == targetToken) {
+      // This is already the right token
+      IERC20(_token).safeTransferFrom(msg.sender, profitSharingPool, _amount);
+      IRewardPool(profitSharingPool).notifyRewardAmount(_amount);
+    } else {
+      // We need to convert
+      if (routes[_token][targetToken].length > 1) {
+        IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
+        uint256 balanceToSwap = IERC20(_token).balanceOf(address(this));
+
+        IERC20(_token).safeApprove(router, 0);
+        IERC20(_token).safeApprove(router, balanceToSwap);
+
+        IUniswapV2Router02(router).swapExactTokensForTokens(
+          balanceToSwap,
+          1, // We will accept any amount
+          routes[_token][targetToken],
+          address(this),
+          block.timestamp
+        );
+        // Now we can send this token forward
+        uint256 convertedRewardAmount = IERC20(targetToken).balanceOf(address(this));
+        uint256 rewardSplit = convertedRewardAmount.div(2);
+        IERC20(targetToken).safeTransfer(profitSharingPool, rewardSplit);
+        IERC20(targetToken).safeTransfer(IStrategy(msg.sender).vaultRewardPool(), rewardSplit);
+        IRewardPool(profitSharingPool).notifyRewardAmount(rewardSplit);
+        IRewardPool(IStrategy(msg.sender).vaultRewardPool()).notifyRewardAmount(rewardSplit);
+      }
+      // Else the route does not exist for this token
+      // do not take any fees - leave them in the controller
+    }
+  }
+
 }
