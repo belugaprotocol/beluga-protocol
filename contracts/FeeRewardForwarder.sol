@@ -35,11 +35,15 @@ contract FeeRewardForwarder is Governable {
   using SafeMath for uint256;
   using SafeERC20 for IERC20;
 
+  // Tokens for predefined routes.
+  address constant public beluga = address(0x181dE8C57C4F25eBA9Fd27757BBd11Cc66a55d31);
   address constant public cake = address(0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82);
   address constant public dot = address(0x7083609fCE4d1d8Dc0C979AAb8c869Ea2C873402);
   address constant public wbnb = address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
   address constant public busd = address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
-  address constant public ust = address(0x23396cF899Ca06c4472205fC903bDB4de249D6fC);
+  address constant public dodo = address(0x67ee3Cb086F8a16f34beE3ca72FAD36F7Db929e2);
+  address constant public nrv = address(0x42F6f551ae042cBe50C739158b4f0CAC0Edb9096);
+  address constant public xvs = address(0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63);
 
   mapping (address => mapping (address => address[])) public routes;
 
@@ -55,10 +59,21 @@ contract FeeRewardForwarder is Governable {
     require(_router != address(0), "FeeRewardForwarder: Router not defined");
     router = _router;
     // Predefined routes
+    routes[beluga][busd] = [beluga, wbnb, busd];
     routes[cake][busd] = [cake, wbnb, busd];
     routes[dot][busd] = [dot, wbnb, busd];
     routes[wbnb][busd] = [wbnb, busd];
-    routes[ust][busd] = [ust, wbnb, busd];
+    routes[dodo][busd] = [dodo, wbnb, busd];
+    routes[nrv][busd] = [nrv, busd];
+    routes[xvs][busd] = [xvs, wbnb, busd];
+    // Routes for BELUGA conversion
+    routes[cake][beluga] = [cake, wbnb, beluga];
+    routes[busd][beluga]= [busd, wbnb, beluga];
+    routes[dot][beluga] = [dot, wbnb, beluga];
+    routes[wbnb][beluga] = [wbnb, beluga];
+    routes[dodo][beluga] = [dodo, wbnb, beluga];
+    routes[nrv][beluga] = [nrv, busd, wbnb, beluga];
+    routes[xvs][beluga] = [xvs, wbnb, beluga];
   }
 
   /*
@@ -126,6 +141,8 @@ contract FeeRewardForwarder is Governable {
   // vault reward pool injections. Please note that the strategy
   // calling this function must have a `vaultRewardPool` variable.
   function notifyStrategyFees(address _token, uint256 _amount) external {
+    require(IStrategy(msg.sender).vaultRewardPool() != address(0), "FeeRewardForwarder: Reward pool does not exist");
+
     if (targetToken == address(0)) {
       return; // a No-op if target pool is not set yet
     }
