@@ -729,7 +729,7 @@ contract StakingRewards is LPTokenWrapper, IRewardDistributionRecipient, Control
             // from interacting with the farms, this line ensures
             // an address is an EOA or a contract that has been greylisted
             // to interact with our contracts.
-            if (tx.origin == msg.sender || !IController(controller()).greyList(msg.sender)) {
+            if (tx.origin == msg.sender || IController(controller()).greyList(msg.sender)) {
                 rewardToken.safeTransfer(msg.sender, reward);
                 emit RewardPaid(msg.sender, reward);
             } else {

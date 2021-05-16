@@ -102,8 +102,8 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
     require(
       (msg.sender == tx.origin) ||                // If it is a normal user and not smart contract,
                                                   // then the requirement will pass
-      !IController(controller()).greyList(msg.sender), // If it is a smart contract, then
-      "Vault: This smart contract has been greylisted"  // make sure that it is not on our greyList.
+      IController(controller()).greyList(msg.sender), // If it is a smart contract, then
+      "Vault: This smart contract is not whitelisted"  // check if it is whitelisted.
     );
     _;
   }
