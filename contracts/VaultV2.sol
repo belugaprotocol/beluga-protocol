@@ -14,6 +14,10 @@ import "./interfaces/IUpgradeSource.sol";
 import "./ControllableInit.sol";
 import "./VaultStorage.sol";
 
+/// @title Beluga Vault
+/// @author Chainvisions
+/// @notice Contract for Beluga's yield optimization methods.
+
 contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit, VaultStorage {
   using SafeERC20 for IERC20;
   using Address for address;
@@ -35,14 +39,31 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
   event StrategyChanged(address newStrategy, address oldStrategy);
   event UpgradeAnnounced(address newImplementation);
 
+  modifier whenStrategyDefined() {
+    require(address(strategy()) != address(0), "Vault: Strategy must be defined");
+    _;
+  }
+
+  // Only smart contracts will be affected by this modifier
+  modifier defense() {
+    require(
+      (msg.sender == tx.origin) ||                // If it is a normal user and not smart contract,
+                                                  // then the requirement will pass
+      IController(controller()).greyList(msg.sender), // If it is a smart contract, then
+      "Vault: This smart contract is not whitelisted"  // check if it is whitelisted.
+    );
+    _;
+  }
+
   constructor() public {}
 
   // The function is named differently to not cause an inheritance clash in truffle and to allow for tests
-  function initializeVault(address _storage,
+  function initializeVault(
+    address _storage,
     address _underlying,
     uint256 _toInvestNumerator,
     uint256 _toInvestDenominator
-  ) public initializer {
+  ) external initializer {
     require(_toInvestNumerator <= _toInvestDenominator, "Vault: Cannot invest more than 100%");
     require(_toInvestDenominator != 0, "Vault: Cannot divide by 0");
 
@@ -66,6 +87,16 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
       implementationDelay,
       strategyChangeDelay
     );
+  }
+
+  /**
+  * Chooses the best strategy and re-invests. If the strategy did not change, it just calls
+  * doHardWork on the current strategy. Call this through controller to claim hard rewards.
+  */
+  function doHardWork() whenStrategyDefined onlyControllerOrGovernance external {
+    // Ensure that new funds are invested too
+    invest();
+    IStrategy(strategy()).doHardWork();
   }
 
   function strategy() public view returns(address) {
@@ -98,32 +129,6 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
 
   function nextImplementationDelay() public view returns(uint256) {
     return _nextImplementationDelay();
-  }
-
-  modifier whenStrategyDefined() {
-    require(address(strategy()) != address(0), "Vault: Strategy must be defined");
-    _;
-  }
-
-  // Only smart contracts will be affected by this modifier
-  modifier defense() {
-    require(
-      (msg.sender == tx.origin) ||                // If it is a normal user and not smart contract,
-                                                  // then the requirement will pass
-      IController(controller()).greyList(msg.sender), // If it is a smart contract, then
-      "Vault: This smart contract is not whitelisted"  // check if it is whitelisted.
-    );
-    _;
-  }
-
-  /**
-  * Chooses the best strategy and re-invests. If the strategy did not change, it just calls
-  * doHardWork on the current strategy. Call this through controller to claim hard rewards.
-  */
-  function doHardWork() whenStrategyDefined onlyControllerOrGovernance external {
-    // ensure that new funds are invested too
-    invest();
-    IStrategy(strategy()).doHardWork();
   }
 
   /*
@@ -225,6 +230,10 @@ contract Vault is ERC20, ERC20Detailed, IVault, IUpgradeSource, ControllableInit
     _setVaultFractionToInvestNumerator(numerator);
     _setVaultFractionToInvestDenominator(denominator);
   }
+
+  function addRewardToken(address _rewardToken) external onlyGovernance {
+    rewardTokens.push(_rewardToken);
+}
 
   function rebalance() external onlyControllerOrGovernance {
     withdrawAll();
