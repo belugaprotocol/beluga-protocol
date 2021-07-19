@@ -31,13 +31,9 @@ contract FeeRewardForwarder is Governable {
   address public targetToken;
   address public profitSharingPool;
 
-  address public router;
-
   event TokenPoolSet(address token, address pool);
 
-  constructor(address _storage, address _router) public Governable(_storage) {
-    require(_router != address(0), "FeeRewardForwarder: Router not defined");
-    router = _router;
+  constructor(address _storage) public Governable(_storage) {
     // Predefined routes
     routes[cake][wbnb] = [cake, wbnb];
     routes[wings][wbnb] = [wings, wbnb];
@@ -68,11 +64,14 @@ contract FeeRewardForwarder is Governable {
   */
   function setConversionPath(address from, address to, address[] memory _route)
   public onlyGovernance {
-    require(from == _route[0],
-      "FeeRewardForwarder: The first token of the route must be the from token");
-    require(to == _route[_route.length - 1],
-      "FeeRewardForwarder: The last token of the route must be the to token");
+
     routes[from][to] = _route;
+  }
+
+  function setConversionRouter(address _from, address _to, address _router)
+  public onlyGovernance {
+    require(_router != address(0), "FeeRewardForwarder: The router cannot be empty");
+    targetRouter[_from][_to] = _router;
   }
 
   // Transfers the funds from the msg.sender to the pool
@@ -90,11 +89,12 @@ contract FeeRewardForwarder is Governable {
       if (routes[_token][targetToken].length > 1) {
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
         uint256 balanceToSwap = IERC20(_token).balanceOf(address(this));
+        address swapRouter = targetRouter[_token][targetToken];
 
-        IERC20(_token).safeApprove(router, 0);
-        IERC20(_token).safeApprove(router, balanceToSwap);
+        IERC20(_token).safeApprove(swapRouter, 0);
+        IERC20(_token).safeApprove(swapRouter, balanceToSwap);
 
-        IUniswapV2Router02(router).swapExactTokensForTokens(
+        IUniswapV2Router02(swapRouter).swapExactTokensForTokens(
           balanceToSwap,
           1, // We will accept any amount
           routes[_token][targetToken],
