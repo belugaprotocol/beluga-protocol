@@ -59,21 +59,12 @@ contract FeeRewardForwarder is Governable {
     require(_router != address(0), "FeeRewardForwarder: Router not defined");
     router = _router;
     // Predefined routes
-    routes[beluga][busd] = [beluga, wbnb, busd];
-    routes[cake][busd] = [cake, wbnb, busd];
-    routes[dot][busd] = [dot, wbnb, busd];
-    routes[wbnb][busd] = [wbnb, busd];
-    routes[dodo][busd] = [dodo, wbnb, busd];
-    routes[nrv][busd] = [nrv, busd];
-    routes[xvs][busd] = [xvs, wbnb, busd];
-    // Routes for BELUGA conversion
-    routes[cake][beluga] = [cake, wbnb, beluga];
-    routes[busd][beluga]= [busd, wbnb, beluga];
-    routes[dot][beluga] = [dot, wbnb, beluga];
-    routes[wbnb][beluga] = [wbnb, beluga];
-    routes[dodo][beluga] = [dodo, wbnb, beluga];
-    routes[nrv][beluga] = [nrv, busd, wbnb, beluga];
-    routes[xvs][beluga] = [xvs, wbnb, beluga];
+    routes[beluga][wbnb] = [beluga, wbnb];
+    routes[cake][wbnb] = [cake, wbnb];
+    routes[dot][wbnb] = [dot, wbnb];
+    routes[dodo][wbnb] = [dodo, wbnb];
+    routes[nrv][wbnb] = [nrv, busd, wbnb];
+    routes[xvs][wbnb] = [xvs, wbnb];
   }
 
   /*
